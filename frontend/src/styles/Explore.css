@@ -534,3 +534,109 @@
     max-width: calc(100vw - 32px);
   }
 }
+
+
+/* ===== Loại hình: chip filter (dễ nhìn, luôn hiển thị) ===== */
+.panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: none;
+  max-height: 60%;
+}
+
+.tagbar {
+  padding: 2px 16px 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.tagbar-label {
+  font: 700 11px var(--body);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.tagbar-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #1e293b;
+  font: 600 13px var(--body);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.tchip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #f5f0fb;
+}
+
+.tchip em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  background: #eef2f6;
+  padding: 1px 7px;
+  border-radius: 99px;
+}
+
+.tchip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(106, 74, 156, .35);
+}
+
+.tchip.on em {
+  background: rgba(255, 255, 255, .25);
+  color: #fff;
+}
+
+.tripbtn-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--accent);
+  font: 700 13px var(--body);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tripbtn-mini:hover {
+  background: #f5f0fb;
+}
+
+.tripbtn-mini b {
+  min-width: 20px;
+  height: 20px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  font: 700 11.5px/20px var(--body);
+  text-align: center;
+  padding: 0 4px;
+}
+
+@media (max-width: 860px) {
+  .panel {
+    max-height: none;
+    overflow: visible;
+  }
+}

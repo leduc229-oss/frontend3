@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import '../styles/Explore.css';
 import '../styles/Planner.css';
-import ExploreTopBar from '../components/explore/ExploreTopBar';
 import FilterPanel from '../components/explore/FilterPanel';
 import PlaceCard from '../components/explore/PlaceCard';
 import ExploreMap from '../components/explore/ExploreMap';
@@ -38,6 +37,15 @@ export default function ExplorePage({
   const [isOpenOnly, setIsOpenOnly] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [mobileView, setMobileView] = useState('list'); // 'list' | 'map'
+
+  // Tự cuộn danh sách tới thẻ địa điểm khi người dùng bấm vào marker trên bản đồ
+  const listRef = useRef(null);
+  const scrollToSelectedRef = useRef(false);
+
+  const handleSelectFromMap = useCallback((place) => {
+    scrollToSelectedRef.current = true;
+    setSelectedPlace(place);
+  }, []);
 
   // Planner parameters
   const [daysCount, setDaysCount] = useState(2);
@@ -105,6 +113,25 @@ export default function ExplorePage({
     if (selectedSort === 'name') return (a.name || '').localeCompare(b.name || '');
     return 0;
   });
+
+  // Cuộn khung danh sách đến đúng thẻ địa điểm được chọn trên bản đồ
+  useEffect(() => {
+    if (!scrollToSelectedRef.current) return;
+    scrollToSelectedRef.current = false;
+    const list = listRef.current;
+    if (!list || !selectedPlace) return;
+
+    const card = Array.from(list.querySelectorAll('[data-id]')).find(
+      (el) => el.getAttribute('data-id') === String(selectedPlace.id)
+    );
+    if (!card) return;
+
+    const listRect = list.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const offsetInList = cardRect.top - listRect.top + list.scrollTop;
+    const target = offsetInList - (list.clientHeight - cardRect.height) / 2;
+    list.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+  }, [selectedPlace]);
 
   // Tag counts
   const tagCounts = {};
@@ -219,16 +246,6 @@ export default function ExplorePage({
 
   return (
     <div className="gz-view gz-explore on" data-view="explore">
-      {/* Top Bar Header */}
-      <ExploreTopBar
-        mode={mode}
-        onSelectMode={onSelectMode}
-        selectedCity={selectedCity}
-        onSelectCity={onSelectCity}
-        cartCount={cartItems.length}
-        onOpenCart={onOpenCart}
-      />
-
       {/* Mode 1: Khám phá */}
       <main className="layout" id="layout" hidden={mode !== 'explore'}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
@@ -256,9 +273,11 @@ export default function ExplorePage({
             onAdminAdd={onAdminAdd}
             onAdminExport={onAdminExport}
             onAdminReset={onAdminReset}
+            cartCount={cartItems.length}
+            onOpenCart={onOpenCart}
           />
 
-          <div className="cards" id="list">
+          <div className="cards" id="list" ref={listRef}>
             {filteredPlaces.length > 0 ? (
               filteredPlaces.map((place) => (
                 <PlaceCard
@@ -287,7 +306,7 @@ export default function ExplorePage({
           cityConfig={cityConfig}
           places={filteredPlaces}
           selectedPlace={selectedPlace}
-          onSelectPlace={setSelectedPlace}
+          onSelectPlace={handleSelectFromMap}
           onToggleCart={onToggleCart}
           cartItems={cartItems}
         />

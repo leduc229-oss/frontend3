@@ -44,30 +44,76 @@ function getAuthHeaders() {
   return headers;
 }
 
-// Helper xử lý fetch có fallback mock an toàn khi Backend chưa chạy
+// Backend được coi là "không khả dụng" khi: lỗi mạng, proxy lỗi (502/503/504),
+// hoặc 404/405/500 mà body KHÔNG phải JSON có thông điệp lỗi (vd: Vite/Express/nginx
+// trả "Cannot POST /api/v1/..." vì chưa có backend hoặc chưa có route).
+export class ApiError extends Error {
+  constructor(message, status, unavailable) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.unavailable = !!unavailable;
+  }
+}
+
+export const isBackendUnavailable = (err) =>
+  !!err && (err.unavailable === true || err.name === 'TypeError' ||
+    /Failed to fetch|NetworkError/i.test(err.message || ''));
+
+// Helper xử lý fetch có fallback mock an toàn khi Backend chưa chạy / chưa có route
 async function safeFetch(url, options = {}, mockFallback = null) {
   try {
-    const res = await fetch(url, options);
+    let res;
+    try {
+      res = await fetch(url, options);
+    } catch (netErr) {
+      throw new ApiError(netErr.message || 'Failed to fetch', 0, true);
+    }
     if (!res.ok) {
-      let errData = {};
+      let errData = null;
       try {
         errData = await res.json();
       } catch {
         // Response không phải JSON
       }
-      throw new Error(errData.error?.message || errData.message || `Lỗi HTTP ${res.status}`);
+      const msg = errData && (errData.error?.message || errData.message);
+      const unavailable = !msg && [404, 405, 500, 502, 503, 504].includes(res.status);
+      throw new ApiError(msg || `Lỗi HTTP ${res.status}`, res.status, unavailable);
     }
-    const json = await res.json();
+    let json;
+    try {
+      json = await res.json();
+    } catch {
+      // 200 nhưng không phải JSON (vd: index.html do SPA fallback) => backend không có route này
+      throw new ApiError('Phản hồi không hợp lệ từ máy chủ', res.status, true);
+    }
     return json.data !== undefined ? json.data : json;
   } catch (err) {
-    if (mockFallback !== null && (err.name === 'TypeError' || err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
-      console.warn(`[GeoZone API] Backend chưa khả dụng (${url}), sử dụng dữ liệu cục bộ giả lập.`, err.message);
-      await new Promise((r) => setTimeout(r, 250)); // Simulating network latency
+    if (mockFallback !== null && isBackendUnavailable(err)) {
+      console.warn(`[GeoZone API] Backend không khả dụng (${url}: ${err.message}), dùng dữ liệu cục bộ.`);
+      await new Promise((r) => setTimeout(r, 150));
       return typeof mockFallback === 'function' ? mockFallback() : mockFallback;
     }
     throw err;
   }
 }
+
+// ---- Tài khoản cục bộ (chế độ offline) ----
+const DEMO_ACCOUNTS = [
+  { email: 'demo@geozone.vn', password: 'password123', name: 'Người dùng demo', role: 'user' },
+  { email: 'admin@geozone.vn', password: 'admin123', name: 'Quản trị viên GeoZone', role: 'admin' }
+];
+const LOCAL_USERS_KEY = 'geozone_local_users';
+const readLocalUsers = () => {
+  try { return JSON.parse(localStorage.getItem(LOCAL_USERS_KEY)) || []; } catch { return []; }
+};
+const writeLocalUsers = (u) => localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(u));
+const startLocalSession = (acc) => {
+  const user = { name: acc.name, email: acc.email, role: acc.role || 'user' };
+  setToken('mock_jwt_token_' + Date.now());
+  setStoredUser(user);
+  return user;
+};
 
 /* ==========================================================================
    1. AUTHENTICATION & PROFILE APIS (API_DOCUMENTATION.md #2 & #3)
@@ -85,17 +131,12 @@ export async function registerApi({ username, email, password, name }) {
     const data = await safeFetch(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: targetEmail,
-        password: String(password || ''),
-        name: targetName
-      })
+      body: JSON.stringify({ email: targetEmail, password: String(password || ''), name: targetName })
     });
 
-    // Sau khi đăng ký thành công, tự động gọi login để lấy accessToken và đồng bộ phiên
+    // Sau khi đăng ký thành công, tự động đăng nhập để lấy accessToken
     try {
-      const loggedUser = await loginApi({ email: targetEmail, password });
-      return loggedUser;
+      return await loginApi({ email: targetEmail, password });
     } catch {
       const rawUser = data.user || {};
       const userObj = {
@@ -108,16 +149,16 @@ export async function registerApi({ username, email, password, name }) {
       return userObj;
     }
   } catch (err) {
-    // Mock fallback nếu backend offline
-    if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
-      const mockUser = {
-        name: targetName,
-        email: targetEmail,
-        role: 'user'
-      };
-      setToken('mock_jwt_token_' + Date.now());
-      setStoredUser(mockUser);
-      return mockUser;
+    // Backend không khả dụng -> đăng ký cục bộ
+    if (isBackendUnavailable(err)) {
+      if (!targetEmail || !password) throw new Error('Vui lòng nhập email và mật khẩu.');
+      const exists =
+        DEMO_ACCOUNTS.some((a) => a.email === targetEmail) ||
+        readLocalUsers().some((a) => a.email === targetEmail);
+      if (exists) throw new Error('Email này đã được đăng ký.');
+      const acc = { email: targetEmail, password: String(password), name: targetName, role: 'user' };
+      writeLocalUsers([...readLocalUsers(), acc]);
+      return startLocalSession(acc);
     }
     throw err;
   }
@@ -165,16 +206,14 @@ export async function loginApi({ username, email, password }) {
     setStoredUser(userObj);
     return userObj;
   } catch (err) {
-    // Mock fallback khi backend chưa chạy
-    if (err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'))) {
-      const mockUser = {
-        name: targetEmail.includes('admin') ? 'Quản trị viên GeoZone' : (targetEmail.split('@')[0] || 'Người dùng'),
-        email: targetEmail.includes('@') ? targetEmail : `${targetEmail}@geozone.vn`,
-        role: targetEmail.includes('admin') ? 'admin' : 'user'
-      };
-      setToken('mock_jwt_token_' + Date.now());
-      setStoredUser(mockUser);
-      return mockUser;
+    // Backend không khả dụng -> đăng nhập cục bộ bằng tài khoản mẫu / tài khoản đã đăng ký trên máy
+    if (isBackendUnavailable(err)) {
+      const key = targetEmail.toLowerCase();
+      const acc = [...DEMO_ACCOUNTS, ...readLocalUsers()].find(
+        (a) => (a.email === key || a.email.split('@')[0] === key) && a.password === String(password || '')
+      );
+      if (!acc) throw new Error('Sai email hoặc mật khẩu.');
+      return startLocalSession(acc);
     }
     throw err;
   }

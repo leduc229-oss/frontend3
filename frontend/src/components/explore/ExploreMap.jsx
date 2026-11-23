@@ -173,6 +173,11 @@ export default function ExploreMap({
       });
 
       markersLayerRef.current.addLayer(marker);
+
+      // Marker bị vẽ lại sau khi chọn nên popup bị đóng; mở lại popup cho địa điểm đang chọn
+      if (isSelected) {
+        marker.openPopup();
+      }
     });
   }, [places, selectedPlace, cartItems, cityConfig, onSelectPlace, onToggleCart]);
 

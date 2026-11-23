@@ -57,7 +57,7 @@ export default function Navbar({
             className={currentView === 'explore' ? 'active' : ''}
             onClick={(e) => {
               e.preventDefault();
-              onNavigate('explore');
+              onNavigate('explore', { mode: 'explore' });
             }}
           >
             Khám phá

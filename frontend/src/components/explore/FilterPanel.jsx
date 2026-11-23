@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { TAGS, CITIES } from '../../data/mockData';
 
 export default function FilterPanel({
@@ -24,15 +24,13 @@ export default function FilterPanel({
   isAdmin = false,
   onAdminAdd = () => {},
   onAdminExport = () => {},
-  onAdminReset = () => {}
+  onAdminReset = () => {},
+  cartCount = 0,
+  onOpenCart = () => {}
 }) {
-  const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
-
-  const getTagSummary = () => {
-    const n = selectedTags.length;
-    if (n === 0) return 'Loại hình';
-    if (n === 1) return TAGS[selectedTags[0]] || selectedTags[0];
-    return `${n} loại hình`;
+  const TAG_ICONS = {
+    food: '🍜', culture: '🏛️', nature: '🌿', sightseeing: '📸', nightlife: '🌙',
+    adventure: '🧗', beach: '🏖️', history: '📜', shopping: '🛍️'
   };
 
   return (
@@ -66,50 +64,36 @@ export default function FilterPanel({
             />
           </div>
 
-          {/* Tag Dropdown Filter */}
-          <details
-            className={`tagdd ${selectedTags.length > 0 ? 'on' : ''}`}
-            id="tagDd"
-            open={isTagDropdownOpen}
-          >
-            <summary
-              className="tagsum"
-              aria-label="Loại hình"
-              onClick={(e) => {
-                e.preventDefault();
-                setIsTagDropdownOpen(!isTagDropdownOpen);
-              }}
-            >
-              <span id="tagSum">{getTagSummary()}</span>
-            </summary>
+          <button type="button" className="tripbtn-mini" id="tripBtn" onClick={onOpenCart}>
+            🧳 Chuyến đi (<b id="tripCount">{cartCount}</b>)
+          </button>
+        </div>
 
-            <div className="tagmenu" id="tagChips" role="group" aria-label="Loại hình">
-              {selectedTags.length > 0 && (
-                <button
-                  type="button"
-                  className="tagclear"
-                  id="tagClear"
-                  onClick={onClearTags}
-                >
-                  Bỏ chọn tất cả ({selectedTags.length})
-                </button>
-              )}
-              {Object.entries(TAGS).map(([key, label]) => {
-                const count = tagCounts[key] || 0;
-                return (
-                  <label key={key} className="opt">
-                    <input
-                      type="checkbox"
-                      checked={selectedTags.includes(key)}
-                      onChange={() => onToggleTag(key)}
-                    />
-                    <span>{label}</span>
-                    <em>{count}</em>
-                  </label>
-                );
-              })}
-            </div>
-          </details>
+        {/* Loại hình: chip luôn hiển thị */}
+        <div className="tagbar" id="tagChips" role="group" aria-label="Loại hình">
+          <span className="tagbar-label">Loại hình</span>
+          <div className="tagbar-list">
+            <button
+              type="button"
+              className={`tchip ${selectedTags.length === 0 ? 'on' : ''}`}
+              aria-pressed={selectedTags.length === 0}
+              onClick={onClearTags}
+            >
+              Tất cả
+            </button>
+            {Object.entries(TAGS).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={`tchip ${selectedTags.includes(key) ? 'on' : ''}`}
+                aria-pressed={selectedTags.includes(key)}
+                onClick={() => onToggleTag(key)}
+              >
+                <span aria-hidden="true">{TAG_ICONS[key] || '📍'}</span> {label}
+                <em>{tagCounts[key] || 0}</em>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Destination + Zone + Cost: one grouped row */}
